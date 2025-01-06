@@ -763,9 +763,11 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
 
         double refreshrate, clockspeed;
         int missedvblanks;
-        info.vsync = StringUtils::Format("VSyncOff: {:.1f} latency: {:.3f}  ",
+        info.vsync = StringUtils::Format("VSyncOff: {:.1f} latency: {:.3f} at:{:.3f} vt:{:.3f}",
                                          m_clockSync.m_syncOffset / 1000,
-                                         DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
+                                         DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f,
+                                         m_audioLatencyTweak,
+                                         m_latencyTweak);
         if (m_dvdClock.GetClockInfo(missedvblanks, clockspeed, refreshrate))
         {
           info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
@@ -1173,6 +1175,11 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
   return m_queued.size() + m_discard.size();
 }
 
+void CRenderManager::UpdateAudioLatencyTweak(double audioLatency)
+{
+  m_audioLatencyTweak = audioLatency;
+}
+
 void CRenderManager::PrepareNextRender()
 {
   if (m_queued.empty())
@@ -1197,9 +1204,8 @@ void CRenderManager::PrepareNextRender()
 
   m_displayLatency = DVD_MSEC_TO_TIME(
       m_latencyTweak +
-      static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetDisplayLatency()) -
-      m_videoDelay -
-      static_cast<double>(CServiceBroker::GetWinSystem()->GetFrameLatencyAdjustment()));
+      m_audioLatencyTweak -
+      m_videoDelay);
 
   double frameOnScreen = m_dvdClock.GetClock();
   double renderPts = frameOnScreen + m_displayLatency;
@@ -1272,7 +1278,7 @@ void CRenderManager::PrepareNextRender()
     m_presentsource = idx;
     m_presentstarted = true;
     m_queued.pop_front();
-    m_presentpts = m_Queue[idx].pts - m_displayLatency;
+    m_presentpts = m_Queue[idx].pts;
     m_presentevent.notifyAll();
 
   }
@@ -1284,7 +1290,7 @@ void CRenderManager::PrepareNextRender()
     m_presentsource = m_queued.front();
     m_presentstarted = true;
     m_queued.pop_front();
-    m_presentpts = m_Queue[m_presentsource].pts - m_displayLatency - frametime / 2;
+    m_presentpts = m_Queue[m_presentsource].pts - frametime / 2;
     m_presentevent.notifyAll();
   }
 
@@ -1311,10 +1317,22 @@ bool CRenderManager::GetStats(int &lateframes, double &pts, int &queued, int &di
 {
   std::unique_lock<CCriticalSection> lock(m_presentlock);
   lateframes = m_lateframes / 10;
-  pts = m_presentpts;
+  pts = m_presentpts - m_displayLatency;
   queued = m_queued.size();
   discard  = m_discard.size();
   return true;
+}
+
+double CRenderManager::GetRenderPts()
+{
+  std::unique_lock<CCriticalSection> lock(m_presentlock);
+  return (m_presentpts - m_displayLatency);
+}
+
+double CRenderManager::GetFramePts()
+{
+  std::unique_lock<CCriticalSection> lock(m_presentlock);
+  return m_presentpts;
 }
 
 void CRenderManager::CheckEnableClockSync()
