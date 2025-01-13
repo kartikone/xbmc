@@ -698,7 +698,6 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
       m_info.m_repeat = 1;      
       
       uint32_t hd_bits = 0;
-      uint32_t nHeaderSize = 0;
 
       // If XLL aka DTS-HD Master Audio - Work out the bit depth
       if (ext_sub_sync == DTS_SYNC_EXT_XLL)
@@ -722,8 +721,8 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
         bitPosition = 32;  // Fast forward through bits to start after sub sync word
 
         // XLL Common Header
-        uint32_t nVersion = ExtractBits(4) + 1;
-        nHeaderSize = ExtractBits(8) + 1;
+        uint32_t nVersion = ExtractBits(4) + 1;           // Version is 4 bits, add 1 to get actual version
+        uint32_t nHeaderSize = ExtractBits(8) + 1;        // Header size is 8 bits, add 1 to get actual size (size is in bytes)
         uint32_t nBits4FrameFsize = ExtractBits(5) + 1;
         uint32_t nLLFrameSize = ExtractBits(nBits4FrameFsize) + 1;
         uint32_t nNumChSetsInFrame = ExtractBits(4) + 1;
