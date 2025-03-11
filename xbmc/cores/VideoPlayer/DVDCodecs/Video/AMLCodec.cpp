@@ -2623,6 +2623,45 @@ int CAMLCodec::DequeueBuffer()
   return ret;
 }
 
+inline double CAMLCodec::CalculatePictureDuration()
+{
+  double rate_duration = static_cast<double>(am_private->video_rate * DVD_TIME_BASE) / UNIT_FREQ;
+
+  if (m_last_pts == DVD_NOPTS_VALUE) return rate_duration;
+  
+  if (m_cur_pts < m_last_pts) 
+  {
+    LogIf(LOGDEBUG, LOGVIDEO, "CAMLCodec", "cur pts:[{:.3f}] < last pts:[{:.3f}] dur:[{:.3f}ms]",
+          static_cast<double>(m_cur_pts) / DVD_TIME_BASE,
+          static_cast<double>(m_last_pts) / DVD_TIME_BASE,
+          rate_duration / 1000);
+
+    m_cur_pts = m_last_pts + rate_duration;
+    return rate_duration;
+  }
+
+  double picture_duration = static_cast<double>(m_cur_pts - m_last_pts);
+  double duration_ratio = picture_duration / rate_duration;
+
+  // pts order not correct (sometimes, the pts_server in the kernel returns wrong
+  // pts values => try to compensate). If the difference is too big, then we assume
+  // there's a leap in the stream's pts values
+  if ((m_speed == DVD_PLAYSPEED_NORMAL) &&
+      (duration_ratio < 0.2 || (duration_ratio > 1.5 && duration_ratio < 4.0))) {
+
+    LogIf(LOGDEBUG, LOGVIDEO, "CAMLCodec", "drift cur pts:[{:.3f}] last pts:[{:.3f}] calc dur:[{:.3f}ms] ratio:[{:.3f}]",
+          static_cast<double>(m_cur_pts) / DVD_TIME_BASE,
+          static_cast<double>(m_last_pts) / DVD_TIME_BASE,
+          picture_duration / 1000,
+          duration_ratio);
+
+    m_cur_pts = m_last_pts + rate_duration;
+    return rate_duration;
+  }
+
+  return picture_duration;
+}
+
 CDVDVideoCodec::VCReturn CAMLCodec::GetPicture(VideoPicture& videoPicture)
 {
   struct vdec_info vi;
@@ -2643,10 +2682,7 @@ CDVDVideoCodec::VCReturn CAMLCodec::GetPicture(VideoPicture& videoPicture)
 
     m_tp_last_frame = std::chrono::system_clock::now();
 
-    if (m_last_pts == DVD_NOPTS_VALUE)
-      videoPicture.iDuration = static_cast<double>(am_private->video_rate * DVD_TIME_BASE) / UNIT_FREQ;
-    else
-      videoPicture.iDuration = static_cast<double>(m_cur_pts - m_last_pts);
+    videoPicture.iDuration = CalculatePictureDuration();
 
     videoPicture.dts = DVD_NOPTS_VALUE;
     videoPicture.pts = static_cast<double>(m_cur_pts);
