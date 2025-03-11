@@ -128,6 +128,14 @@ public:
 #define LogFC(level, component, format, ...) \
   Log((level), (component), ("{}: " format), __FUNCTION__, ##__VA_ARGS__)
 
+// Macro for conditional logging
+#define LogIf(level, component, classname, format, ...) \
+  do { \
+    if (CServiceBroker::GetLogging().IsLogLevelLogged(level) && \
+        CServiceBroker::GetLogging().CanLogComponent(component)) \
+      CLog::Log(level, component, ("{}::{}: " format), classname, __FUNCTION__, ##__VA_ARGS__); \
+  } while(0)
+
 private:
   static CLog& GetInstance();
 
