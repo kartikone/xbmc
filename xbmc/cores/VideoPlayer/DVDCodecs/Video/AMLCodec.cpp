@@ -2584,6 +2584,16 @@ float CAMLCodec::GetBufferLevel(int new_chunk, int &data_len, int &free_len)
   return level;
 }
 
+union TimeConverter {
+  struct {
+    uint32_t usec;
+    uint32_t sec;
+  } components;
+  uint64_t value;
+};
+
+static TimeConverter tc;
+
 int CAMLCodec::DequeueBuffer()
 {
   v4l2_buffer vbuf = v4l2_buffer();
@@ -2595,8 +2605,10 @@ int CAMLCodec::DequeueBuffer()
   {
     m_last_pts = m_cur_pts;
 
-    m_cur_pts =  static_cast<uint64_t>(static_cast<uint32_t>(vbuf.timestamp.tv_sec)) << 32;
-    m_cur_pts += static_cast<uint32_t>(vbuf.timestamp.tv_usec);
+    tc.components.sec = vbuf.timestamp.tv_sec;
+    tc.components.usec = vbuf.timestamp.tv_usec;
+
+    m_cur_pts = tc.value;
 
     CLog::Log(LOGDEBUG, LOGAVTIMING, "CAMLCodec::DequeueBuffer: pts:{:.3f} idx:{:d}",
   			static_cast<double>(m_cur_pts) /  DVD_TIME_BASE, vbuf.index);
