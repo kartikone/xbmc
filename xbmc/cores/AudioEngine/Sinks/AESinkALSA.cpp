@@ -158,6 +158,8 @@ inline std::unique_ptr<snd_config_t, SndConfigDeleter> SndConfigCopy(snd_config_
 }
 } // namespace
 
+int speaker_layout = 0;
+
 CAESinkALSA::CAESinkALSA() :
   m_pcm(NULL)
 {
@@ -270,7 +272,7 @@ inline CAEChannelInfo CAESinkALSA::GetChannelLayout(const AEAudioFormat& format,
   {
     /* ask for the actual map */
     snd_pcm_chmap_t* actualMap = snd_pcm_get_chmap(m_pcm);
-    if (actualMap)
+    if (actualMap && m_device == "default")
     {
       alsaMapStr = ALSAchmapToString(actualMap);
 
@@ -307,8 +309,8 @@ inline CAEChannelInfo CAESinkALSA::GetChannelLayout(const AEAudioFormat& format,
             format.m_channelLayout.Count(), info.Count());
   CLog::Log(LOGDEBUG, "CAESinkALSA::GetChannelLayout - Requested Layout: {}",
             std::string(format.m_channelLayout));
-  CLog::Log(LOGDEBUG, "CAESinkALSA::GetChannelLayout - Got Layout: {} (ALSA: {})",
-            std::string(info), alsaMapStr);
+  CLog::Log(LOGDEBUG, "CAESinkALSA::GetChannelLayout - Got Layout: {} (ALSA: {} CEA: {} )",
+            std::string(info), alsaMapStr, speaker_layout);
 
   return info;
 }
@@ -378,8 +380,15 @@ CAEChannelInfo CAESinkALSA::ALSAchmapToAEChannelMap(snd_pcm_chmap_t* alsaMap)
   CAEChannelInfo info;
 
   for (unsigned int i = 0; i < alsaMap->channels; i++)
-    info += ALSAChannelToAEChannel(alsaMap->pos[i]);
-
+  {
+    /* handle double side speaker quirk */
+    if (alsaMap->pos[i] == SND_CHMAP_SL && info.HasChannel(AE_CH_SL))
+      info += AE_CH_BL;
+    else if (alsaMap->pos[i] == SND_CHMAP_SR && info.HasChannel(AE_CH_SR))
+      info += AE_CH_BR;
+    else
+      info += ALSAChannelToAEChannel(alsaMap->pos[i]);
+  }
   return info;
 }
 
@@ -482,8 +491,12 @@ snd_pcm_chmap_t* CAESinkALSA::SelectALSAChannelMap(const CAEChannelInfo& info)
   for (snd_pcm_chmap_query_t* supportedMap = supportedMaps[i++];
        supportedMap; supportedMap = supportedMaps[i++])
   {
-    if (supportedMap->map.channels == info.Count())
-    {
+    if (info.Count() < 3)
+      break;
+
+    CLog::Log(LOGDEBUG, "CAESinkALSA::SelectALSAChannelMap checking available maps i: {} channels {} requested channels {}", i, supportedMap->map.channels, info.Count());
+
+    if (supportedMap->map.channels == info.Count()) {
       CAEChannelInfo candidate = ALSAchmapToAEChannelMap(&supportedMap->map);
       const CAEChannelInfo* selectedInfo = &info;
 
@@ -693,6 +706,8 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
   inconfig.format = format.m_dataFormat;
   inconfig.sampleRate = format.m_sampleRate;
 
+  CLog::Log(LOGINFO, "CAESinkALSA::Initialize - Requested layout {}", std::string(format.m_channelLayout));
+
   /*
    * We can't use the better GetChannelLayout() at this point as the device
    * is not opened yet, and we need inconfig.channels to select the correct
@@ -701,16 +716,63 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
    */
   inconfig.channels = GetChannelLayoutLegacy(format, 2, 8).Count();
 
+  //enum IEC958_mode_codec codec = inconfig.channels > 2
+  //                                 ? MULTI_CHANNEL_LPCM
+  //                                 : STEREO_PCM;
+
+  enum IEC958_mode_codec codec = STEREO_PCM;
+
   /* if we are raw, correct the data format */
   if (format.m_dataFormat == AE_FMT_RAW)
   {
-    inconfig.format   = AE_FMT_S16NE;
-    m_passthrough     = true;
+    inconfig.format = AE_FMT_S16NE;
+    m_passthrough = true;
+
+    switch(format.m_streamInfo.m_type)
+    {
+      case CAEStreamInfo::STREAM_TYPE_DTS_512:
+      case CAEStreamInfo::STREAM_TYPE_DTS_1024:
+      case CAEStreamInfo::STREAM_TYPE_DTS_2048:
+      case CAEStreamInfo::STREAM_TYPE_DTSHD_CORE:
+        codec = DTS;
+        break;
+
+      case CAEStreamInfo::STREAM_TYPE_DTSHD:
+        codec = DTS_HD;
+        break;
+
+      case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
+        codec = _DTS_HD_MA;
+        break;
+
+      case CAEStreamInfo::STREAM_TYPE_AC3:
+        codec = DOLBY_DIGITAL;
+        break;
+
+      case CAEStreamInfo::STREAM_TYPE_EAC3:
+        codec = DD_PLUS;
+        break;
+
+      case CAEStreamInfo::STREAM_TYPE_TRUEHD:
+      case CAEStreamInfo::STREAM_TYPE_MLP:
+        codec = TRUEHD;
+        break;
+
+      default:
+        break;
+    }
+
   }
   else
   {
-    m_passthrough   = false;
+    m_passthrough = false;
+    if (device.find("AML") != std::string::npos) device = "default";
   }
+
+  aml_set_audio_passthrough(m_passthrough);
+  CSysfsPath("/sys/class/audiodsp/digital_codec", codec);
+
+  CLog::Log(LOGINFO, "CAESinkALSA::Initialize - set digital codec {}", codec);
 
   if (inconfig.channels == 0)
   {
@@ -726,59 +788,28 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
   if (m_passthrough || devType == AE_DEVTYPE_HDMI || devType == AE_DEVTYPE_IEC958)
     GetAESParams(format, AESParams);
 
-  // set codec before opening the device
-  AMLDeviceType amlDeviceType = GetAMLDeviceType(device);
-  if (amlDeviceType != AML_NONE)
-  {
-    enum IEC958_mode_codec codec = inconfig.channels > 2 ? MULTI_CHANNEL_LPCM : STEREO_PCM;
-
-    CLog::Log(LOGINFO, "CAESinkALSA::Initialize - Configure simple control for \"{}\"",
-      GetAMLCardName(amlDeviceType));
-
-    if (m_passthrough)
-    {
-      switch(format.m_streamInfo.m_type)
-      {
-        case CAEStreamInfo::STREAM_TYPE_AC3:
-          codec = DOLBY_DIGITAL;
-          break;
-
-        case CAEStreamInfo::STREAM_TYPE_DTS_512:
-        case CAEStreamInfo::STREAM_TYPE_DTS_1024:
-        case CAEStreamInfo::STREAM_TYPE_DTS_2048:
-        case CAEStreamInfo::STREAM_TYPE_DTSHD_CORE:
-          codec = DTS;
-          break;
-
-        case CAEStreamInfo::STREAM_TYPE_DTSHD:
-          codec = DTS_HD;
-          break;
-
-        case CAEStreamInfo::STREAM_TYPE_EAC3:
-          codec = DD_PLUS;
-          break;
-
-        case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
-          codec = _DTS_HD_MA;
-          break;
-
-        case CAEStreamInfo::STREAM_TYPE_TRUEHD:
-          codec = TRUEHD;
-          break;
-
-        default:
-          break;
-      }
-    }
-
-    aml_set_audio_passthrough(m_passthrough);
-    aml_configure_simple_control(device, codec);
-  }
-
   CLog::Log(LOGINFO, "CAESinkALSA::Initialize - Attempting to open device \"{}\"", device);
 
   /* get the sound config */
   std::unique_ptr<snd_config_t, SndConfigDeleter> config = SndConfigCopy(snd_config);
+
+  if (!OpenPCMDevice(device, AESParams, inconfig.channels, &m_pcm, config.get()))
+  {
+    CLog::Log(LOGERROR, "CAESinkALSA::Initialize - failed to initialize device \"{}\" with params {} even for stereo", device, AESParams);
+    return false;
+  }
+
+  snd_pcm_chmap_t* selectedChmap = NULL;
+  if (!m_passthrough)
+  {
+    selectedChmap = SelectALSAChannelMap(format.m_channelLayout);
+    if (selectedChmap)
+    {
+      CLog::Log(LOGDEBUG, "CAESinkALSA::Initialize - found a channel map, channels {}", selectedChmap->channels);
+      /* update wanted channel count according to the selected map */
+      inconfig.channels = selectedChmap->channels;
+    }
+  }
 
   if (!OpenPCMDevice(device, AESParams, inconfig.channels, &m_pcm, config.get()))
   {
@@ -792,29 +823,46 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
 
   CLog::Log(LOGINFO, "CAESinkALSA::Initialize - Opened device \"{}\"", device);
 
-  snd_pcm_chmap_t* selectedChmap = NULL;
-  if (!m_passthrough)
-  {
-    selectedChmap = SelectALSAChannelMap(format.m_channelLayout);
-    if (selectedChmap)
-    {
-      /* update wanted channel count according to the selected map */
-      inconfig.channels = selectedChmap->channels;
-    }
-  }
-
   if (!InitializeHW(inconfig, outconfig) || !InitializeSW(outconfig))
   {
     free(selectedChmap);
     return false;
   }
+  /* set up channel layout defaults */
+  if (outconfig.channels == 2 || m_passthrough)
+    speaker_layout = 0;
+  else if (format.m_channelLayout.Count() <= 4)
+    speaker_layout = 8;
+  else if (format.m_channelLayout.Count() <= 6)
+    speaker_layout = 11;
+  else
+    speaker_layout = 19;
 
   if (selectedChmap)
   {
-    /* failure is OK, that likely just means the selected chmap is fixed already */
-    snd_pcm_set_chmap(m_pcm, selectedChmap);
+    /* refine the speaker channel layout for HDMI LPCM */
+    if (device == "default")
+    {
+      snd_pcm_chmap_query_t** supportedMaps;
+      supportedMaps = snd_pcm_query_chmaps(m_pcm);
+      int i = 0;
+      for (snd_pcm_chmap_query_t* supportedMap = supportedMaps[i++];
+          supportedMap; supportedMap = supportedMaps[i++])
+      {
+        if (ALSAchmapToString(&supportedMap->map) == ALSAchmapToString(selectedChmap))
+        {
+          speaker_layout = --i;
+          break;
+        }
+      }
+      /* failure is OK, that likely just means the selected chmap is fixed already */
+      snd_pcm_set_chmap(m_pcm, selectedChmap);
+    }
     free(selectedChmap);
   }
+
+  CSysfsPath("/sys/class/amhdmitx/amhdmitx0/aud_ch", speaker_layout);
+  CLog::Log(LOGINFO, "CAESinkALSA::Initialize - speaker layout {}", speaker_layout);
 
   // we want it blocking
   snd_pcm_nonblock(m_pcm, 0);
@@ -825,6 +873,7 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
     CLog::Log(LOGINFO, "CAESinkALSA::Initialize - could not open required number of channels");
     return false;
   }
+
   // adjust format to the configuration we got
   format.m_channelLayout = GetChannelLayout(format, outconfig.channels);
   // we might end up with an unusable channel layout that contains only UNKNOWN
@@ -1114,7 +1163,7 @@ void CAESinkALSA::Stop()
 {
   if (!m_pcm)
     return;
-  snd_pcm_drop(m_pcm);
+  snd_pcm_drain(m_pcm); // use drop or drain?
 }
 
 void CAESinkALSA::GetDelay(AEDelayStatus& status)
@@ -1430,10 +1479,8 @@ void CAESinkALSA::EnumerateDevicesEx(AEDeviceInfoList &list, bool force)
        * "plughw", "dsnoop"). */
 
       else if (baseName != "default"
-            && baseName != "surround40"
-            && baseName != "surround41"
-            && baseName != "surround50"
-            && baseName != "surround51"
+            && baseName != "sysdefault"
+            && baseName.find("surround") == std::string::npos
             && baseName != "hw"
             && baseName != "dmix"
             && baseName != "plughw"
@@ -1599,6 +1646,7 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
   if (!OpenPCMDevice(device, "", ALSA_MAX_CHANNELS, &pcmhandle, config))
     return;
 
+  CLog::Log(LOGINFO, "CAESinkALSA::EnumerateDevice - device {} description {}", device, description);
   snd_pcm_info_t *pcminfo;
   snd_pcm_info_alloca(&pcminfo);
   memset(pcminfo, 0, snd_pcm_info_sizeof());
@@ -1717,6 +1765,10 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_512);
       info.m_dataFormats.push_back(AE_FMT_RAW);
     }
+    else if (info.m_displayName.find("AML") != std::string::npos)
+    {
+      info.m_displayNameExtra = "HDMI, S/PDIF & analogue";
+    }
     else if (info.m_displayNameExtra.empty())
     {
       /* for USB audio, it gets a bit confusing as there is
@@ -1731,7 +1783,7 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
     if (device == "@" || device == "default")
     {
       /* Make it "Default (whatever)" */
-      info.m_displayName = "Default (" + info.m_displayName + (info.m_displayNameExtra.empty() ? "" : " " + info.m_displayNameExtra + ")");
+      info.m_displayName = "Default (" + info.m_displayName + (info.m_displayNameExtra.empty() ? "" : ": " + info.m_displayNameExtra + ")");
       info.m_displayNameExtra = "";
     }
 
