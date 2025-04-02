@@ -183,7 +183,7 @@ void CRendererStarfish::Update()
 }
 
 void CRendererStarfish::RenderUpdate(
-    int index, int index2, bool clear, unsigned int flags, unsigned int alpha)
+    int index, int duration, bool clear, unsigned int flags, unsigned int alpha)
 {
   if (!m_configured)
   {

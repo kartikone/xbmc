@@ -30,7 +30,7 @@ public:
   CRenderInfo GetRenderInfo() override;
   void UnInit() override{};
   void Update() override{};
-  void RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha) override;
+  void RenderUpdate(int index, bool clear, unsigned int flags, unsigned int alpha) override;
   bool SupportsMultiPassRendering() override { return false; }
 
   // Player functions

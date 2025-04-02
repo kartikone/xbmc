@@ -146,7 +146,7 @@ void CRendererMediaCodecSurface::Reset()
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
 }
 
-void CRendererMediaCodecSurface::RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha)
+void CRendererMediaCodecSurface::RenderUpdate(int index, bool clear, unsigned int flags, unsigned int alpha)
 {
   m_bConfigured = true;
 
