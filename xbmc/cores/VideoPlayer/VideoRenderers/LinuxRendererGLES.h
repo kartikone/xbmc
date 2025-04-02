@@ -73,7 +73,7 @@ public:
   void SetBufferSize(int numBuffers) override { m_NumYV12Buffers = numBuffers; }
   bool IsGuiLayer() override;
   void ReleaseBuffer(int idx) override;
-  void RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha) override;
+  void RenderUpdate(int index, int duration, bool clear, unsigned int flags, unsigned int alpha) override;
   void Update() override;
   bool RenderCapture(int index, CRenderCapture* capture) override;
   CRenderInfo GetRenderInfo() override;

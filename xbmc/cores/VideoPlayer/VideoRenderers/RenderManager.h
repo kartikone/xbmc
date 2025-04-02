@@ -140,6 +140,9 @@ protected:
   void PresentFields(bool clear, DWORD flags, DWORD alpha);
   void PresentBlend(bool clear, DWORD flags, DWORD alpha);
 
+  void SetPresentSource();
+  void DiscardPresentSource();
+  void BusyWait(useconds_t uSeconds);
   void PrepareNextRender();
   bool IsPresenting();
   bool IsGuiLayer();
@@ -206,6 +209,7 @@ protected:
   struct SPresent
   {
     double         pts;
+    double         duration;
     EFIELDSYNC     presentfield;
     EPRESENTMETHOD presentmethod;
   } m_Queue[NUM_BUFFERS]{};
@@ -230,7 +234,6 @@ protected:
   bool m_forceNext = false;
   bool m_presentstarted = false;
   int m_presentsource = 0;
-  int m_presentsourcePast = -1;
   XbmcThreads::ConditionVariable m_presentevent;
   CEvent m_flushEvent;
   CEvent m_initEvent;
