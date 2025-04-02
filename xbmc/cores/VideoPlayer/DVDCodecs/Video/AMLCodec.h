@@ -82,7 +82,7 @@ public:
   int           GetAmlDuration() const;
   int           ReleaseFrame(const uint32_t index, bool bDrop = false);
 
-  static int    PollFrame();
+  static int    PollFrame(const int duration);
   static void   SetPollDevice(int device);
 
 private:

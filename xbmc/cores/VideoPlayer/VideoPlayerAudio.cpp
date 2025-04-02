@@ -234,7 +234,7 @@ void CVideoPlayerAudio::UpdatePlayerInfo()
     m_info = info;
   }
 
-  m_dataCacheCore.SetAudioLiveBitRate(m_audioStats.GetBitrate());  
+  m_dataCacheCore.SetAudioLiveBitRate(m_audioStats.GetBitrate());
   m_dataCacheCore.SetAudioQueueLevel(std::min(99,m_messageQueue.GetLevel()));
   m_dataCacheCore.SetAudioQueueDataLevel(std::min(99,m_messageQueue.GetLevel(true)));
 }
@@ -480,6 +480,8 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
     }
     else
     {
+      //logM(LOGINFO, "CVideoPlayerAudio", "Add delay");
+      audioframe.pts += 165000;
       m_audioClock = audioframe.pts;
     }
 
@@ -512,7 +514,7 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
       audioframe.format.m_channelLayout = CAEUtil::GetAEChannelLayout(m_streaminfo.channellayout);
 
     // If we have a stream bits per sample set on the stream info bit depth.
-    if (m_streaminfo.bitspersample)   
+    if (m_streaminfo.bitspersample)
       audioframe.format.m_streamInfo.m_bitDepth = m_streaminfo.bitspersample;
 
     // we have successfully decoded an audio frame, setup renderer to match

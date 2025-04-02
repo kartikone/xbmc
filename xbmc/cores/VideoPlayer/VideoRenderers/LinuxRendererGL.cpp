@@ -466,12 +466,9 @@ void CLinuxRendererGL::Update()
   ValidateRenderTarget();
 }
 
-void CLinuxRendererGL::RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha)
+void CLinuxRendererGL::RenderUpdate(int index, int duration, bool clear, unsigned int flags, unsigned int alpha)
 {
-  if (index2 >= 0)
-    m_iYV12RenderBuffer = index2;
-  else
-    m_iYV12RenderBuffer = index;
+  m_iYV12RenderBuffer = index;
 
   if (!ValidateRenderer())
   {
@@ -510,7 +507,7 @@ void CLinuxRendererGL::RenderUpdate(int index, int index2, bool clear, unsigned 
   if (!Render(flags, m_iYV12RenderBuffer) && clear)
     ClearBackBuffer();
 
-  if (index2 >= 0)
+  if (index >= 0)
   {
     m_iYV12RenderBuffer = index;
     glEnable(GL_BLEND);

@@ -2328,7 +2328,7 @@ void CAMLCodec::CloseAmlVideo()
 
 void CAMLCodec::Reset()
 {
-  logNoFormatM(LOGDEBUG, "CAMLCodec");
+  logNoFormatM(LOGINFO, "CAMLCodec");
 
   if (!m_opened)
     return;
@@ -2508,7 +2508,7 @@ bool CAMLCodec::AddData(uint8_t *pData, size_t iSize, double dts, double pts)
 
 int CAMLCodec::m_pollDevice;
 
-int CAMLCodec::PollFrame()
+int CAMLCodec::PollFrame(const int duration)
 {
   std::lock_guard<std::mutex> lock(pollSyncMutex);
 
@@ -2520,10 +2520,10 @@ int CAMLCodec::PollFrame()
   codec_poll_fd[0].events = POLLOUT;
 
   std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
-  poll(codec_poll_fd, 1, 50);
-  g_aml_sync_event.Set();
+  int events = poll(codec_poll_fd, 1, duration);
   int elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - now).count();
-  logComponentM(LOGDEBUG, LOGAVTIMING, "CAMLCodec", "PollFrame elapsed:{:.3f}ms", elapsed / 1000.0);
+  if (events > 0) g_aml_sync_event.Set();
+  logM(LOGINFO, "CAMLCodec", "elapsed:[{:.3f}] duration:[{:d}] events:[{:d}]", (elapsed / 1000.0), duration, events);
 
   return 1;
 }
