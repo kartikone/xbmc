@@ -132,6 +132,9 @@ public:
 
   int GetVideoLatencyTweak() { return m_videoLatencyTweak; }
 
+  void SetAudioLatencyTweak(int tweak) { m_audioLatencyTweak = tweak; }
+  int GetAudioLatencyTweak() { return m_audioLatencyTweak; }
+
   void SetVideoSettings(const CVideoSettings& settings);
 
 protected:
@@ -140,6 +143,9 @@ protected:
   void PresentFields(bool clear, DWORD flags, DWORD alpha);
   void PresentBlend(bool clear, DWORD flags, DWORD alpha);
 
+  void SetPresentSource();
+  void Wait(useconds_t uSeconds);
+  bool Paused(bool paused, double clock);
   void PrepareNextRender();
   bool IsPresenting();
   bool IsGuiLayer();
@@ -192,11 +198,13 @@ protected:
   ERENDERSTATE m_renderState = STATE_UNCONFIGURED;
   CEvent m_stateEvent;
 
-  /// Display latency tweak value from AdvancedSettings for the current refresh rate and resolution, and audio
-  /// in milliseconds
+  // Display latency tweak from AdvancedSettings for the current refresh rate and resolution
   std::atomic_int m_videoLatencyTweak = 0;
-  /// Display latency updated in PrepareNextRender in DVD clock units, includes m_latencyTweak
-  double m_displayLatency = 0.0;
+
+  // Display latency tweak from AdvancedSettings for audio in milliseconds
+  std::atomic_int m_audioLatencyTweak = 0;
+
+  // User set latency
   std::atomic_int m_videoDelay = {};
 
   int m_QueueSize = 2;
@@ -205,6 +213,7 @@ protected:
   struct SPresent
   {
     double         pts;
+    double         duration;
     EFIELDSYNC     presentfield;
     EPRESENTMETHOD presentmethod;
   } m_Queue[NUM_BUFFERS]{};
@@ -229,6 +238,7 @@ protected:
   bool m_forceNext = false;
   bool m_presentstarted = false;
   int m_presentsource = 0;
+  double m_presentframetime = 0;
   XbmcThreads::ConditionVariable m_presentevent;
   CEvent m_flushEvent;
   CEvent m_initEvent;
