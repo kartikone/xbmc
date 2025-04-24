@@ -48,12 +48,14 @@ public:
   CDVDStreamInfo  m_hints;
 };
 
-
-CVideoPlayerVideo::CVideoPlayerVideo(CDVDClock* pClock
-                                ,CDVDOverlayContainer* pOverlayContainer
-                                ,CDVDMessageQueue& parent
-                                ,CRenderManager& renderManager
-                                ,CProcessInfo &processInfo)
+CVideoPlayerVideo::CVideoPlayerVideo(
+  CDVDClock* pClock,
+  CDVDOverlayContainer* pOverlayContainer,
+  CDVDMessageQueue& parent,
+  CRenderManager& renderManager,
+  CProcessInfo &processInfo,
+  double messageQueueTimeSize
+)
 : CThread("VideoPlayerVideo")
 , IDVDStreamPlayerVideo(processInfo)
 , m_messageQueue("video")
@@ -72,9 +74,9 @@ CVideoPlayerVideo::CVideoPlayerVideo(CDVDClock* pClock
   m_iDroppedRequest = 0;
   m_fForcedAspectRatio = 0;
 
-  // 128 MB allows max bitrate of 128 Mbit/s (e.g. UHD Blu-Ray) during 8 seconds
-  m_messageQueue.SetMaxDataSize(40 * 1024 * 1024);
-  m_messageQueue.SetMaxTimeSize(8.0);
+  // allows max bitrate of 128 Mbit/s (e.g. UHD Blu-Ray) during messageQueueTimeSize seconds
+  m_messageQueue.SetMaxDataSize(128 * (messageQueueTimeSize / 8) * 1024 * 1024);
+  m_messageQueue.SetMaxTimeSize(messageQueueTimeSize);
 
   m_iDroppedFrames = 0;
   m_fFrameRate = 25;

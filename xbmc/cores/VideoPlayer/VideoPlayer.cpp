@@ -602,8 +602,8 @@ void CVideoPlayer::CreatePlayers()
   if (m_players_created)
     return;
 
-  m_VideoPlayerVideo = new CVideoPlayerVideo(&m_clock, &m_overlayContainer, m_messenger, m_renderManager, *m_processInfo);
-  m_VideoPlayerAudio = new CVideoPlayerAudio(&m_clock, m_messenger, m_renderManager, *m_processInfo);
+  m_VideoPlayerVideo = new CVideoPlayerVideo(&m_clock, &m_overlayContainer, m_messenger, m_renderManager, *m_processInfo, m_messageQueueTimeSize);
+  m_VideoPlayerAudio = new CVideoPlayerAudio(&m_clock, m_messenger, m_renderManager, *m_processInfo, m_messageQueueTimeSize);
   m_VideoPlayerSubtitle = new CVideoPlayerSubtitle(&m_overlayContainer, *m_processInfo);
   m_VideoPlayerTeletext = new CDVDTeletextData(*m_processInfo);
   m_VideoPlayerRadioRDS = new CDVDRadioRDSData(*m_processInfo);
@@ -656,6 +656,8 @@ CVideoPlayer::CVideoPlayer(IPlayerCallback& callback)
   m_HasVideo = false;
   m_HasAudio = false;
   m_UpdateStreamDetails = false;
+
+  m_messageQueueTimeSize = 16; // 16 seconds for buffer at max bit rate.
 
   m_SkipCommercials = true;
 
@@ -1917,7 +1919,7 @@ void CVideoPlayer::HandlePlaySpeed()
       // Note: Previously used cache.level >= 1 would keep video stalled
       // event after cache was full
       // Talk link: https://github.com/xbmc/xbmc/pull/23760
-      if (cache.time > 8.0)
+      if (cache.time > m_messageQueueTimeSize)
         SetCaching(CACHESTATE_INIT);
     }
     else
@@ -1989,9 +1991,8 @@ void CVideoPlayer::HandlePlaySpeed()
         }
         else
         {
-          // start caching if audio and video have run dry
-          if (m_VideoPlayerAudio->GetLevel() <= 50 &&
-              m_processInfo->GetLevelVQ() <= 50)
+          // start caching if audio and video are running dry
+          if ((m_VideoPlayerAudio->GetLevel() <= 20) || m_VideoPlayerVideo->GetLevel() <= 20))
           {
             SetCaching(CACHESTATE_FULL);
           }
@@ -4873,8 +4874,8 @@ int CVideoPlayer::GetCacheLevel() const
 double CVideoPlayer::GetQueueTime()
 {
   int a = m_VideoPlayerAudio->GetLevel();
-  int v = m_processInfo->GetLevelVQ();
-  return std::max(a, v) * 8000.0 / 100;
+  int v = m_VideoPlayerVideo->GetLevel();
+  return std::max(a, v) * m_messageQueueTimeSize * 1000.0 / 100;
 }
 
 int CVideoPlayer::AddSubtitleFile(const std::string& filename, const std::string& subfilename)
@@ -5134,7 +5135,7 @@ void CVideoPlayer::UpdatePlayState(double timeout)
   }
   else
   {
-    state.cache_level = std::min(1.0, queueTime / 8000.0);
+    state.cache_level = std::min(1.0, queueTime /(m_messageQueueTimeSize * 1000.0));
     state.cache_offset = queueTime / state.timeMax;
     state.cache_time = queueTime / 1000.0;
   }
