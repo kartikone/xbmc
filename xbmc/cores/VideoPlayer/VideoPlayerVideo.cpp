@@ -165,7 +165,6 @@ bool CVideoPlayerVideo::OpenStream(CDVDStreamInfo hint)
     OpenStream(hint, std::move(codec));
     CLog::Log(LOGINFO, "Creating video thread");
     m_messageQueue.Init();
-    m_processInfo.SetLevelVQ(0);
     Create();
   }
   return true;
@@ -317,28 +316,23 @@ bool CVideoPlayerVideo::IsInited() const
 inline void CVideoPlayerVideo::SendMessage(std::shared_ptr<CDVDMsg> pMsg, int priority)
 {
   m_messageQueue.Put(pMsg, priority);
-  m_processInfo.SetLevelVQ(m_messageQueue.GetLevel());
 }
 
 inline void CVideoPlayerVideo::SendMessageBack(const std::shared_ptr<CDVDMsg>& pMsg, int priority)
 {
   m_messageQueue.PutBack(pMsg, priority);
-  m_processInfo.SetLevelVQ(m_messageQueue.GetLevel());
 }
 
 inline void CVideoPlayerVideo::FlushMessages()
 {
   m_messageQueue.Flush();
-  m_processInfo.SetLevelVQ(m_messageQueue.GetLevel());
 }
 
 inline MsgQueueReturnCode CVideoPlayerVideo::GetMessage(std::shared_ptr<CDVDMsg>& pMsg,
                                                         std::chrono::milliseconds timeout,
                                                         int& priority)
 {
-  MsgQueueReturnCode ret = m_messageQueue.Get(pMsg, timeout, priority);
-  m_processInfo.SetLevelVQ(m_messageQueue.GetLevel());
-  return ret;
+  return m_messageQueue.Get(pMsg, timeout, priority);
 }
 
 void CVideoPlayerVideo::Process()
