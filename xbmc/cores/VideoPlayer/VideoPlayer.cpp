@@ -1992,7 +1992,7 @@ void CVideoPlayer::HandlePlaySpeed()
         else
         {
           // start caching if audio and video are running dry
-          if ((m_VideoPlayerAudio->GetLevel() <= 20) || m_VideoPlayerVideo->GetLevel() <= 20))
+          if ((m_VideoPlayerAudio->GetLevel() <= 20) || (m_VideoPlayerVideo->GetLevel() <= 20))
           {
             SetCaching(CACHESTATE_FULL);
           }
