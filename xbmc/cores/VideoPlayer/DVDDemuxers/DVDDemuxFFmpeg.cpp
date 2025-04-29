@@ -1133,11 +1133,25 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
 
         if (pPacket)
         {
-          if (m_bAVI && stream->codecpar && stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+
+          if (stream->codecpar && (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO))
           {
-            // AVI's always have borked pts, specially if m_pFormatContext->flags includes
-            // AVFMT_FLAG_GENPTS so always use dts
-            m_pkt.pkt.pts = AV_NOPTS_VALUE;
+            logM(LOGINFO, "CDVDDemuxFFmpeg", "video: pts [{}] dts [{}] den [{}] num [{}] avi [{}] codec [{}] [{}]",
+                 m_pkt.pkt.pts, m_pkt.pkt.dts ,stream->time_base.den, stream->time_base.num,
+                 m_bAVI, stream->codecpar->codec_type, avcodec_get_name(stream->codecpar->codec_id));
+
+            if (m_bAVI)
+            {
+              // AVI's always have borked pts, specially if m_pFormatContext->flags includes
+              // AVFMT_FLAG_GENPTS so always use dts
+              m_pkt.pkt.pts = AV_NOPTS_VALUE;
+            }
+            else if (stream->codecpar->codec_id == AV_CODEC_ID_VC1)
+            {
+              // none AVI VC1 - PTS typcially set no value, and DTS and PTS are equivilant
+              // to keep it simple just copy over at this point rather than later.
+              if (m_pkt.pkt.pts == AV_NOPTS_VALUE) m_pkt.pkt.pts = m_pkt.pkt.dts;
+            }
           }
 
           // copy contents into our own packet
@@ -1153,7 +1167,6 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
               ConvertTimestamp(m_pkt.pkt.dts, stream->time_base.den, stream->time_base.num);
           pPacket->duration = DVD_SEC_TO_TIME((double)m_pkt.pkt.duration * stream->time_base.num /
                                               stream->time_base.den);
-
           CDVDDemuxUtils::StoreSideData(pPacket, &m_pkt.pkt);
 
           CDVDInputStream::IDisplayTime* inputStream = m_pInput->GetIDisplayTime();
