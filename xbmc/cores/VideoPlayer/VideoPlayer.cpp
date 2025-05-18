@@ -1360,7 +1360,7 @@ void CVideoPlayer::Prepare()
         logM(LOGDEBUG, "CVideoPlayer", "starting subtitle demuxer from: {}", starttime);
       else
         logM(LOGDEBUG, "CVideoPlayer", "failed to start subtitle demuxing from: {}", starttime);
-    }    
+    }
   }
 
   UpdatePlayState(0);
