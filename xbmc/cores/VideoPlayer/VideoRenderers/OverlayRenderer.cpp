@@ -474,6 +474,15 @@ std::shared_ptr<COverlay> CRenderer::ConvertLibass(
         frameHeight *= 2.0;
     }
 
+    double frameHeight = static_cast<double>(rOpts.frameHeight);
+
+    if (m_stereomode == "top_bottom" || m_stereomode == "bottom_top")
+    {
+      // only half-ou video, ou video don't need to correct frame height
+      if (rOpts.sourceWidth / rOpts.sourceHeight > 1.2f)
+        frameHeight *= 2.0;
+    }
+
     int assPlayResY = o.GetLibassHandler()->GetPlayResY();
     double assVertMargin = static_cast<double>(overlayStyle->marginVertical) *
                            (static_cast<double>(assPlayResY) / 720);

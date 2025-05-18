@@ -35,6 +35,8 @@
 
 #include "platform/linux/SysfsPath.h"
 
+#include "platform/linux/SysfsPath.h"
+
 #include <charconv>
 #include <cmath>
 #include <fmt/format.h>
@@ -509,6 +511,15 @@ bool CPlayerGUIInfo::GetLabel(std::string& value, const CFileItem *item, int con
       return true;
     case PLAYER_PROCESS_AUDIOBITSPERSAMPLE:
       value = StringUtils::FormatNumber(CServiceBroker::GetDataCacheCore().GetAudioBitsPerSample());
+      return true;
+    case PLAYER_PROCESS_AML_PIXELFORMAT:
+      value = GetAMLConfigInfo("Colour depth") + ", " + GetAMLConfigInfo("Colourspace");
+      return true;
+    case PLAYER_PROCESS_AML_DISPLAYMODE:
+      value =  GetAMLConfigInfo("VIC");
+      return true;
+    case PLAYER_PROCESS_AML_EOFT_GAMUT:
+      value = GetAMLConfigInfo("EOTF") + " " + GetAMLConfigInfo("Colourimetry");
       return true;
 
     case PLAYER_PROCESS_AUDIO_LIVE_BIT_RATE:
