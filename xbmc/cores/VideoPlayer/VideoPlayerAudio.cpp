@@ -565,7 +565,7 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
     audioframe.hasDownmix = true;
   }
 
-  if (audioframe.passthrough && audioframe.hasTimestamp)
+  if (audioframe.hasTimestamp)
     ClockAlign(audioframe.pts);
 
   CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio::OutputPacket: pts:{:.3f} curr_pts:{:.3f} clock:{:.3f} level:{:d}",
